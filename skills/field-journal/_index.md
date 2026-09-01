@@ -6,15 +6,16 @@
 
 ## 统计
 
-- 真实项目数：20
+- 真实项目数：22
 - 种子参考数：17
-- 总条目数：37
-- 最近更新：2026-08-20
+- 总条目数：39
+- 最近更新：2026-08-26
 
 ## 按场景分类
 
 ### APK / Android 逆向
 
+- [2026-08-26 MCPE Dex2C MCPELIFE0 弹窗去除（唯一 Java 缝隙改抓取 URL + pairip 签名校验已被破 → 任意 key 重签）](./2026-08-26_apk-mcpe-dex2c-mcpelife-popup-removal.md)
 - [2026-08-20 Flutter AOT 服务端驱动广告去除（Blutter + 等长字符串替换）](./2026-08-20_apk-flutter-banner-ad-removal.md)
 - [2026-05-15-cellular-pro-mumu-ksad-fragment-fix](./2026-05-15-cellular-pro-mumu-ksad-fragment-fix.md)
 - [[种子] seed-008_apk-okhttp-ssl-pin-bypass](./seed-008_apk-okhttp-ssl-pin-bypass.md)
@@ -58,6 +59,7 @@
 
 ### iOS 逆向
 
+- [2026-08-24 iOS IPA 注入 dylib 分流：段布局判定源码可恢复性 + cargo 路径指纹识别 stripped Rust](./2026-08-24_ios-ipa-injected-dylib-executor-triage.md)
 - [[种子] seed-009_ios-jailbr&#101;ak-detect-bypass](./seed-009_ios-jailbr%65ak-detect-bypass.md)
 
 ### 工具链与环境
