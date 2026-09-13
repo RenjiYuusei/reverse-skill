@@ -37,6 +37,21 @@
       "quick": false
     },
     {
+      "hint": "apk getkey bypass keydock",
+      "expect": "R42",
+      "quick": true
+    },
+    {
+      "hint": "去除 apk 卡密 验证",
+      "expect": "R42",
+      "quick": false
+    },
+    {
+      "hint": "patch so return true arm64 bypass",
+      "expect": "R42",
+      "quick": false
+    },
+    {
       "hint": "ios reverse objection mobsf",
       "expect": "R2",
       "quick": true

@@ -79,6 +79,7 @@ python3 skills/case-review/scripts/review_case.py work/<case> --verify-hashes --
 | ID | 条件 | PRIMARY |
 |----|------|---------|
 | **R4** | DSL VM / fireye / 自定义 opcode VM | `reverse-engineering/dsl-vm-reverse/` |
+| **R42** | APK 卡密 / KeyDock / GetKey / Native SO 门禁 | `apk-license-bypass/` |
 | **R1** | APK / smali / jadx / apktool | `apk-reverse/` |
 | **R2** | IPA / iOS / Objection / MobSF / mobile | `mobile-reverse/` |
 | **R3** | JS 签名 / 前端加密 / jshook / CDP | `js-reverse/` |

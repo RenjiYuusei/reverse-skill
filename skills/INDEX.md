@@ -8,6 +8,7 @@
 | 模块 | 摘要 |
 |------|------|
 | [api-security](api-security/SKILL.md) | Use for authorized security assessment of REST, GraphQL, WebSocket, or SOAP APIs, including discovery, authentication, authorization, rate-limit, and CI/CD t... |
+| [apk-license-bypass](apk-license-bypass/SKILL.md) | 针对 Android APK 卡密系统、GetKey/KeyDock 鉴权弹窗与 Native SO 门禁校验的专用逆向与 Patch 规程。涵盖 Java/Smali 鉴权跳过、ELF ARM64 动态 JNI 符号重定位分析、Opcode 二进制 Patch 与无 ADB 盲测防崩溃重打包。 |
 | [apk-reverse](apk-reverse/SKILL.md) | 在 CLI 环境下做 Android APK 逆向时使用。适用于 APK 解包、Java 反编译、smali 修改、重打包、Frida 动态 Hook，以及按需切换到 so/native 分析。优先使用本机已安装的 jadx、apktool、frida、adb、ida-reverse、radare2。 |
 | [attack-chain](attack-chain/SKILL.md) | Use for authorized multi-stage attack-path planning and orchestration when a task spans reconnaissance, initial access, privilege escalation, lateral movemen... |
 | [binary-diff](binary-diff/SKILL.md) | 跨版本符号迁移与二进制差分。当你有旧版本的符号/逆向结果，需要快速迁移到新版本时使用。 |
@@ -30,6 +31,7 @@
 | [hardware-security](hardware-security/SKILL.md) | Use for authorized hardware and embedded interface security research including UART/JTAG discovery, debug pad triage, secure boot overview, and offline firmw... |
 | [ida-reverse](ida-reverse/SKILL.md) | IDA Pro 逆向分析辅助技能。当用户提到逆向、反编译、分析二进制/PE/ELF/APK/DLL/SO、破解、找密码、漏洞分析、病毒分析、firmware 固件分析，或需要分析 exe/dll/so/elf/macho/sys 等文件时，务必使用此技能。 |
 | [identity-federation](identity-federation/SKILL.md) | Use for authorized assessment of federated identity systems including SAML, OIDC, OAuth2 flows, SSO misconfiguration, and token confusion issues. |
+| [ipa-dylib-strip](ipa-dylib-strip/SKILL.md) | 适用于 iOS IPA 逆向与净化分析。用于检测、列举、剥离 IPA 内第三方注入的 dylib/tweak（如广告插件、自定义 getkey 验证层、外挂 Hook、Phong Roblox 等）并修补 Mach-O 二进制文件（消除 LC_LOAD_DYLIB/LC_LOAD_WEAK_DYLIB 依赖、内存... |
 | [js-reverse](js-reverse/SKILL.md) | 在使用 js-reverse-mcp 做前端 JavaScript 逆向时使用，适用于签名链路定位、页面观察取证、运行时采样、本地补环境复现与证据化输出。优先适配当前环境里的 js-reverse_* 工具，需要更强的浏览器/CDP/Hook 面时联动 jshookmcp。 |
 | [llm-security](llm-security/SKILL.md) | Use for authorized security assessment of LLM applications and AI agents, including prompt injection, tool abuse, RAG exposure, memory poisoning, and model s... |
 | [macos-reverse](macos-reverse/SKILL.md) | Use for authorized macOS and Mach-O reverse engineering including codesign, Objective-C/Swift recovery, endpoint security surfaces, and Apple platform malwar... |
@@ -56,6 +58,7 @@
 
 ```
 skills/api-security/SKILL.md/
+skills/apk-license-bypass/SKILL.md/
 skills/apk-reverse/SKILL.md/
 skills/attack-chain/SKILL.md/
 skills/binary-diff/SKILL.md/
@@ -78,6 +81,7 @@ skills/go-rust-reverse/SKILL.md/
 skills/hardware-security/SKILL.md/
 skills/ida-reverse/SKILL.md/
 skills/identity-federation/SKILL.md/
+skills/ipa-dylib-strip/SKILL.md/
 skills/js-reverse/SKILL.md/
 skills/llm-security/SKILL.md/
 skills/macos-reverse/SKILL.md/
