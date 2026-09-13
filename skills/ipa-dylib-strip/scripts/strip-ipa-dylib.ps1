@@ -6,14 +6,16 @@
     Automates removing third-party injected tweaks/dylibs (e.g., ad injection, custom key systems,
     telemetry tweaks) from modified iOS IPAs while keeping desired frameworks/dylibs intact.
     Handles:
+    - Downloading IPA directly from distribution URL or web page (e.g., appinstall.cloud)
     - Extracting IPA zip container
     - Scanning Mach-O executable load commands (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, etc.)
-    - Zeroing out target load commands and updating Mach-O header (ncmds & sizeofcmds)
+    - Shifting load commands and updating Mach-O header (ncmds & sizeofcmds) cleanly
     - Deleting the dylib files from app bundle / Frameworks
+    - Dedicated preset support (e.g. -Preset phong-roblox for stripping Phong Roblox getkey layer)
     - Repacking into a clean IPA
 
 .PARAMETER InputIpa
-    Path to source .ipa file.
+    Path to source .ipa file. Optional if -Url is provided.
 
 .PARAMETER OutputIpa
     Path to output clean .ipa file. If omitted, defaults to [InputIpa_Name]_stripped.ipa.
@@ -21,17 +23,28 @@
 .PARAMETER StripDylib
     One or more dylib names or regex patterns to remove (e.g. "deltax", "Baby_roblox.dylib").
 
+.PARAMETER Preset
+    Pre-configured target profiles:
+    - "phong-roblox": Automatically targets deltax / BabyRoblox getkey layer while preserving Delta core (libgloop.dylib).
+
+.PARAMETER Url
+    URL to direct .ipa or appinstall install page to download and process automatically.
+
 .PARAMETER ListOnly
     If set, only lists all dylibs in the app bundle and load commands in the binary without modifying.
 
+.PARAMETER KeepExtracted
+    Preserves the extracted bundle directory for manual inspection.
+
 .EXAMPLE
     .\strip-ipa-dylib.ps1 -InputIpa "app.ipa" -ListOnly
-    .\strip-ipa-dylib.ps1 -InputIpa "app.ipa" -OutputIpa "clean.ipa" -StripDylib "deltax"
+    .\strip-ipa-dylib.ps1 -InputIpa "phongroblox.ipa" -Preset phong-roblox
+    .\strip-ipa-dylib.ps1 -Url "https://appinstall.cloud/install/ivjudmr50000" -Preset phong-roblox
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [Parameter(Position = 0)]
     [string]$InputIpa,
 
     [Parameter(Position = 1)]
@@ -39,6 +52,13 @@ param(
 
     [Parameter(Position = 2)]
     [string[]]$StripDylib = @(),
+
+    [Parameter()]
+    [ValidateSet("phong-roblox", "none")]
+    [string]$Preset,
+
+    [Parameter()]
+    [string]$Url,
 
     [switch]$ListOnly,
     [switch]$KeepExtracted
@@ -59,6 +79,51 @@ function Set-U32 {
     $b[$off+3] = [byte](($val -shr 24) -band 0xFF)
 }
 
+# Handle URL download if provided
+$downloadedTempIpa = $null
+if ($Url) {
+    Write-Host "[*] Resolving IPA from URL: $Url" -ForegroundColor Cyan
+    $directIpaUrl = $null
+
+    if ($Url -like "*.ipa*" -or $Url -like "*/ios-file/*") {
+        $directIpaUrl = $Url
+    } else {
+        # Fetch page HTML and look for direct download or itms manifest
+        try {
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
+            $html = $webClient.DownloadString($Url)
+            
+            if ($html -match 'href="([^"]+/ios-file/[^"]+\.ipa)"') {
+                $directIpaUrl = $Matches[1]
+            } elseif ($html -match 'itms-services://\?action=download-manifest&amp;url=([^"&\s]+)') {
+                $plistUrl = [System.Uri]::UnescapeDataString($Matches[1])
+                $plistContent = $webClient.DownloadString($plistUrl)
+                if ($plistContent -match '<string>(https?://[^<]+\.ipa)</string>') {
+                    $directIpaUrl = $Matches[1]
+                }
+            }
+        } catch {
+            Write-Warning "Failed to parse URL page: $_"
+        }
+    }
+
+    if (-not $directIpaUrl) {
+        throw "Could not resolve direct .ipa download link from $Url"
+    }
+
+    Write-Host "[+] Found direct IPA URL: $directIpaUrl" -ForegroundColor Green
+    $downloadedTempIpa = Join-Path ([System.IO.Path]::GetTempPath()) ("download_" + [System.Guid]::NewGuid().ToString('N') + ".ipa")
+    Write-Host "[*] Downloading IPA..." -ForegroundColor Cyan
+    
+    Invoke-WebRequest -Uri $directIpaUrl -OutFile $downloadedTempIpa -UserAgent "Mozilla/5.0"
+    $InputIpa = $downloadedTempIpa
+}
+
+if (-not $InputIpa) {
+    throw "Please specify -InputIpa or -Url."
+}
+
 if (-not (Test-Path -LiteralPath $InputIpa)) {
     throw "Input IPA file not found: $InputIpa"
 }
@@ -67,8 +132,23 @@ $inputFullPath = (Resolve-Path -LiteralPath $InputIpa).Path
 $inputDir = Split-Path -Parent $inputFullPath
 $inputBase = [System.IO.Path]::GetFileNameWithoutExtension($inputFullPath)
 
+# Handle Presets
+$activePatterns = [System.Collections.Generic.List[string]]::new()
+if ($StripDylib) {
+    foreach ($p in $StripDylib) { $activePatterns.Add($p) }
+}
+
+if ($Preset -eq "phong-roblox") {
+    Write-Host "[*] Applying Preset: phong-roblox (Stripping Phong Roblox getkey layer, preserving Delta core)" -ForegroundColor Magenta
+    if (-not ($activePatterns -contains "deltax")) { $activePatterns.Add("deltax") }
+    if (-not ($activePatterns -contains "Baby_roblox")) { $activePatterns.Add("Baby_roblox") }
+    if (-not ($activePatterns -contains "BabyRoblox")) { $activePatterns.Add("BabyRoblox") }
+}
+
 if (-not $OutputIpa) {
-    $OutputIpa = Join-Path $inputDir "${inputBase}_stripped.ipa"
+    $outDir = if ($downloadedTempIpa) { (Get-Location).Path } else { $inputDir }
+    $suffix = if ($Preset -eq "phong-roblox") { "_delta_clean.ipa" } else { "_stripped.ipa" }
+    $OutputIpa = Join-Path $outDir "${inputBase}${suffix}"
 }
 
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ipa_strip_" + [System.Guid]::NewGuid().ToString('N'))
@@ -105,7 +185,6 @@ try {
     if ($executableName -and (Test-Path (Join-Path $appPath $executableName))) {
         $binPath = Join-Path $appPath $executableName
     } else {
-        # Fallback: largest executable file
         $binFile = Get-ChildItem $appPath -File | Where-Object { $_.Length -gt 500KB } | Sort-Object Length -Descending | Select-Object -First 1
         if (-not $binFile) {
             throw "Unable to find main Mach-O executable in $appPath"
@@ -121,6 +200,14 @@ try {
     foreach ($d in $bundleDylibs) {
         $rel = $d.FullName.Substring($appPath.Length + 1)
         Write-Host "    - $rel ($([Math]::Round($d.Length / 1KB, 1)) KB)"
+    }
+
+    # Auto-detection of Phong Roblox tweak layer if preset not explicitly passed
+    if (-not $Preset -and ($activePatterns.Count -eq 0)) {
+        $hasDeltax = $bundleDylibs | Where-Object { $_.Name -like "*deltax*" -or $_.Name -like "*Baby_roblox*" }
+        if ($hasDeltax) {
+            Write-Host "`n[!] Notice: Detected Phong Roblox injected layer ($($hasDeltax.Name)). Use '-Preset phong-roblox' to auto-strip." -ForegroundColor Yellow
+        }
     }
 
     # Parse Mach-O binary
@@ -189,57 +276,94 @@ try {
         return
     }
 
-    if ($StripDylib.Count -eq 0) {
-        Write-Host "`n[!] No dylibs specified to strip (-StripDylib). Use -ListOnly or provide target names." -ForegroundColor Yellow
+    if ($activePatterns.Count -eq 0) {
+        Write-Host "`n[!] No dylibs specified to strip. Provide -StripDylib or -Preset phong-roblox." -ForegroundColor Yellow
         return
     }
 
-    # Strip matching load commands from binary
+    # Protected system & critical framework safelist
+    $safeList = @("libgloop.dylib", "libswift", "RobloxLib", "Persona2", "Reaper", "libobjc", "libSystem")
+
+    # Strip matching load commands from binary with proper memory shifting
     $patchCount = 0
     $bytesToRemoveFromCmds = 0
 
+    # Sort load commands descending by offset so shifting doesn't invalidate lower offsets
+    $cmdsToStrip = @()
     foreach ($lc in $loadCommands) {
         $shouldStrip = $false
-        foreach ($pattern in $StripDylib) {
+        foreach ($pattern in $activePatterns) {
             if ($lc.DylibPath -like "*$pattern*" -or $lc.DylibPath -match $pattern) {
-                $shouldStrip = $true
-                break
+                $isSafe = $false
+                foreach ($safe in $safeList) {
+                    if ($lc.DylibPath -like "*$safe*" -and $pattern -notlike "*$safe*") {
+                        $isSafe = $true
+                        break
+                    }
+                }
+                if (-not $isSafe) {
+                    $shouldStrip = $true
+                    break
+                }
             }
         }
-
         if ($shouldStrip) {
-            Write-Host "`n[-] Stripping Mach-O load command for: $($lc.DylibPath)" -ForegroundColor Red
-            Write-Host "    Offset: 0x$($lc.Offset.ToString('X4')), Size: $($lc.Size) bytes"
-            
-            # Zero out the entire load command
-            for ($z = 0; $z -lt $lc.Size; $z++) {
-                $binBytes[$lc.Offset + $z] = 0
-            }
-            $patchCount++
-            $bytesToRemoveFromCmds += $lc.Size
+            $cmdsToStrip += $lc
         }
     }
 
-    if ($patchCount -gt 0) {
-        $newNcmds = $ncmds - $patchCount
-        $newSizeofcmds = $sizeofcmds - $bytesToRemoveFromCmds
-        Set-U32 $binBytes 0x10 $newNcmds
-        Set-U32 $binBytes 0x14 $newSizeofcmds
+    if ($cmdsToStrip.Count -gt 0) {
+        # Process from highest offset to lowest
+        $cmdsToStripSorted = $cmdsToStrip | Sort-Object Offset -Descending
+        foreach ($lc in $cmdsToStripSorted) {
+            Write-Host "`n[-] Stripping Mach-O load command: $($lc.DylibPath)" -ForegroundColor Red
+            Write-Host "    Offset: 0x$($lc.Offset.ToString('X4')), Size: $($lc.Size) bytes"
 
+            $cmdEnd = $lc.Offset + $lc.Size
+            $totalCmdsEnd = $hdrSize + $sizeofcmds
+
+            # Shift remaining commands left if not at the very end
+            $bytesToShift = $totalCmdsEnd - $cmdEnd
+            if ($bytesToShift -gt 0) {
+                [System.Array]::Copy($binBytes, $cmdEnd, $binBytes, $lc.Offset, $bytesToShift)
+            }
+
+            # Zero out the freed tail region
+            $freedTailOffset = $totalCmdsEnd - $lc.Size
+            for ($z = 0; $z -lt $lc.Size; $z++) {
+                $binBytes[$freedTailOffset + $z] = 0
+            }
+
+            $sizeofcmds -= $lc.Size
+            $ncmds -= 1
+            $patchCount++
+        }
+
+        Set-U32 $binBytes 0x10 $ncmds
+        Set-U32 $binBytes 0x14 $sizeofcmds
         [System.IO.File]::WriteAllBytes($binPath, $binBytes)
-        Write-Host "[+] Successfully patched binary: decremented ncmds to $newNcmds, sizeofcmds to 0x$($newSizeofcmds.ToString('X'))" -ForegroundColor Green
+        Write-Host "[+] Successfully patched Mach-O: updated ncmds=$ncmds, sizeofcmds=0x$($sizeofcmds.ToString('X'))" -ForegroundColor Green
     } else {
         Write-Host "[!] No matching Mach-O load commands found for given pattern(s)." -ForegroundColor Yellow
     }
 
-    # Delete matching files from app bundle
+    # Delete matching dylib files from app bundle
     $deletedFiles = 0
     foreach ($d in $bundleDylibs) {
         $shouldDelete = $false
-        foreach ($pattern in $StripDylib) {
+        foreach ($pattern in $activePatterns) {
             if ($d.Name -like "*$pattern*" -or $d.FullName -like "*$pattern*" -or $d.Name -match $pattern) {
-                $shouldDelete = $true
-                break
+                $isSafe = $false
+                foreach ($safe in $safeList) {
+                    if ($d.Name -like "*$safe*" -and $pattern -notlike "*$safe*") {
+                        $isSafe = $true
+                        break
+                    }
+                }
+                if (-not $isSafe) {
+                    $shouldDelete = $true
+                    break
+                }
             }
         }
         if ($shouldDelete) {
@@ -263,5 +387,8 @@ try {
 } finally {
     if (-not $KeepExtracted -and (Test-Path $tempDir)) {
         Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($downloadedTempIpa -and (Test-Path -LiteralPath $downloadedTempIpa)) {
+        Remove-Item -LiteralPath $downloadedTempIpa -Force -ErrorAction SilentlyContinue
     }
 }
